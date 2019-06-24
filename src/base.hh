@@ -1,6 +1,6 @@
 #pragma once
 #include <vector>
-#include <any>
+#include <atomic>
 
 namespace concurrent
 {
@@ -24,7 +24,7 @@ struct snode : base_node
 
 struct anode : base_node
 {
-    std::vector<base_node*> value;
+    std::vector<std::atomic<base_node*>> value;
 };
 
 struct fsnode : base_node

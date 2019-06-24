@@ -25,6 +25,7 @@ struct trie
     std::optional<value_type> lookup(key_type const& key, hash_type hash, int level, anode* cur)
     {
         auto pos = (hash >> level) & (cur->value.size() - 1);
+        // TODO: maybe put fense here
         auto old = make_optional(cur->value[pos]);
         if (!old.has_value() || dynamic_cast<fvnode*>(&*old))
             return {};
@@ -43,6 +44,18 @@ struct trie
         if (auto u = dynamic_cast<fnode*>(&*old); u)
             return lookup(key, hash, level + 4, u->frozen);
     }
+
+    bool insert(key_type const& key, hash_type hash, value_type const& value, int levle, anode* cur, anode* prev)
+    {
+    }
+
+    void insert(key_type const& key, hash_type hash, value_type const& value)
+    {
+        if (!insert(key, value, hash, 0, root, nullptr))
+            insert(key, hash, value);
+    }
+
+    anode* root;
 };
 
 } // namespace concurrent
