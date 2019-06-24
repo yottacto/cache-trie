@@ -7,6 +7,14 @@
 namespace concurrent
 {
 
+template <class T>
+auto make_optional(T* v) -> std::optional<T>
+{
+    if (v)
+        return *v;
+    return {};
+}
+
 template <class Key, class T>
 struct trie
 {
@@ -14,14 +22,26 @@ struct trie
     using value_type = T;
     using hash_type  = int;
 
-    std::optional<value_type> lookup(key_type const& key, hash_type hash, int level, anode cur)
+    std::optional<value_type> lookup(key_type const& key, hash_type hash, int level, anode* cur)
     {
-        auto pos = (hash >> level) & (cur.size() - 1);
-        auto old = cur[pos];
-        if (old.has_value() || old.type() == typeid(fvnode))
+        auto pos = (hash >> level) & (cur->value.size() - 1);
+        auto old = make_optional(cur->value[pos]);
+        if (!old.has_value() || dynamic_cast<fvnode*>(&*old))
             return {};
-        if (old.type() == typeid(anode))
-            return lookup(key, hash, level + 4, std::any_cast<std::atmoic<>>())
+        if (auto u = dynamic_cast<anode*>(&*old); u)
+            return lookup(key, hash, level + 4, old);
+        if (auto u = dynamic_cast<snode<Key, T>*>(&*old); u) {
+            if (u->key == key)
+                return u->value;
+            else
+                return {};
+        }
+        if (auto u = dynamic_cast<enode*>(&*old); u) {
+            auto an = u->narrow;
+            return lookup(key, hash, level + 4, an);
+        }
+        if (auto u = dynamic_cast<fnode*>(&*old); u)
+            return lookup(key, hash, level + 4, u->frozen);
     }
 };
 
