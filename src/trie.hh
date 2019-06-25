@@ -19,9 +19,9 @@ struct trie
 
     struct snode : base_node
     {
-        template <class T>
-        base_node(hash_type hash, key_type const& key, value_type const& value, T* txn)
-            : hash(hash), key(key), value(value), txn(std::make_shared<T>(txn)) {}
+        template <class U>
+        snode(hash_type hash, key_type const& key, value_type const& value, U* txn)
+            : hash(hash), key(key), value(value), txn(std::make_shared<U>(txn)) {}
 
         hash_type hash;
         key_type key;
@@ -50,6 +50,8 @@ struct trie
 
     struct fnode : base_node
     {
+        fnode(std::shared_ptr<anode> const& an)
+            : frozen(an) {}
         // FIXME
         std::shared_ptr<anode> frozen;
     };
@@ -92,7 +94,7 @@ struct trie
     bool insert(key_type const& key, value_type const& value, hash_type hash, int level, std::shared_ptr<anode> const& cur, std::shared_ptr<anode> const& prev)
     {
         auto pos = (hash >> level) & ((cur->values).size() - 1);
-        auto old = sdt::atomic_load(&cur->values[pos]);
+        auto old = std::atomic_load(&cur->values[pos]);
         if (!old) {
             std::shared_ptr<base_node> sn{std::make_shared<snode>(hash, key, value, new notxn)};
             if (!std::atomic_compare_exchange_weak(&std::atomic_load(&cur->values[pos], &old, sn)))
@@ -114,7 +116,7 @@ struct trie
                         return insert(key, value, hash, level, cur, prev);
                     }
                 } else if (cur->values.size() == 4) {
-                    auto ppos = (h >> (level - 4)) & (prev->values.size() - 1);
+                    auto ppos = (hash >> (level - 4)) & (prev->values.size() - 1);
                     std::shared_ptr<base_node> en{std::make_shared<enode>(prev, ppos, cur, hash, level)};
                     if (std::atomic_compare_exchange_weak(&std::atomic_load(&prev->values[ppos]), &cur, en)) {
                         complete_expansion(en);
@@ -174,14 +176,15 @@ struct trie
             // FIXME atomic_load?
             auto node = std::atomic_load(&cur->values[i]);
             if (!node) {
-                std::shraed_ptr<base_node> fvn = std::make_shared<fvnode>();
+                std::shared_ptr<base_node> fvn = std::make_shared<fvnode>();
                 if (!std::atomic_compare_exchange_weak(&std::atomic_load(&cur->values[i]), &node, fvn))
                     i -= 1;
             } else if (auto u = std::dynamic_pointer_cast<snode>(node); u) {
                 auto txn = std::atomic_load(&u->txn);
                 if (std::dynamic_pointer_cast<notxn>(txn)) {
-                    std::shraed_ptr<base_node> fsn = std::make_shared<fsnode>();
-                    if (!std::atomic_compare_exchange_weak(&std::atomic_load(&u->txn), &txn, fsn)) {
+                    std::shared_ptr<base_node> fsn = std::make_shared<fsnode>();
+                    if (!std::atomic_compare_exchange_weak(&std::atomic_load(&u->txn), &txn, fsn))
+                        i -= 1;
                 } else if (!std::dynamic_pointer_cast<fsnode>(txn)) {
                     std::atomic_compare_exchange_weak(&std::atomic_load(&cur->values[i]), &node, txn);
                     i -= 1;
