@@ -105,8 +105,8 @@ struct trie
             if (std::dynamic_pointer_cast<notxn>(txn)) {
                 if (old->key == key) {
                     std::shared_ptr<base_node> sn{std::make_shared<snode>(hash, key, value, 0)};
-                    if (std::atomic_compare_exchange_weak(&u->txn, &txn, sn)) {
-                        std::atomic_compare_exchange_weak(&cur->values[pos], &old, sn);
+                    if (std::atomic_compare_exchange_weak(&std::atomic_load(&u->txn), &txn, sn)) {
+                        std::atomic_compare_exchange_weak(&std::atomic_load(&cur->values[pos]), &old, sn);
                         return true;
                     } else {
                         return insert(key, value, hash, level, cur, prev);
@@ -114,7 +114,7 @@ struct trie
                 } else if (cur->values.size() == 4) {
                     auto ppos = (h >> (level - 4)) & (prev->values.size() - 1);
                     std::shared_ptr<base_node> en{std::make_shared<enode>(prev, ppos, cur, hash, level)};
-                    if (std::atomic_compare_exchange_weak(&prev->values[ppos], &cur, en)) {
+                    if (std::atomic_compare_exchange_weak(&std::atomic_load(&prev->values[ppos]), &cur, en)) {
                         complete_expansion(en);
                         auto wide = std::atomic_load(en->wide);
                         return insert(key, value, hash, level, wide, prev);
@@ -124,12 +124,17 @@ struct trie
                 } else {
                     std::shared_ptr<base_node> sn{std::make_shared<snode>(hash, key, value, new notxn)};
                     auto an = create_anode(old, sn, level + 4);
-                    // TODO
+                    if (std::atomic_compare_exchange_weak(&std::atomic_load(&u->txn), &txn, an)) {
+                        std::atomic_compare_exchange_weak(&std::atomic_load(&cur->values[pos], &old, an));
+                        return true;
+                    } else {
+                        return insert(key, value, hash, level, cur, prev);
+                    }
                 }
-            } else if (txn == 1) {
-                // TODO
+            } else if (std::dynamic_pointer_cast<fsnode>(txn)) {
+                return false;
             } else {
-                std::atomic_compare_exchange_weak(&cur->values[pos], &old, txn);
+                std::atomic_compare_exchange_weak(&std::atomic_load(&cur->values[pos]), &old, txn);
                 return insert(key, value, hash, level, cur, prev);
             }
         }
