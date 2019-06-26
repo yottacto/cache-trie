@@ -1,5 +1,7 @@
 #pragma once
+#include <iostream>
 #include <vector>
+#include <string>
 #include <memory>
 #include <optional>
 #include <atomic>
@@ -8,24 +10,24 @@
 namespace concurrent
 {
 
+enum class node
+{
+    base,
+    anode,
+    snode,
+    notxn,
+    fsnode,
+    fvnode,
+    fnode,
+    enode,
+};
+
 template <class Key, class T>
 struct trie
 {
     using key_type   = Key;
     using value_type = T;
     using hash_type  = int;
-
-    enum class node
-    {
-        base,
-        anode,
-        snode,
-        notxn,
-        fsnode,
-        fvnode,
-        fnode,
-        enode,
-    };
 
     struct base_node
     {
@@ -367,6 +369,55 @@ struct trie
             }
             i += 1;
         }
+    }
+
+    void print_prefix(std::string const& prefix) const
+    {
+        int n = prefix.size();
+        for (auto i = 0; i < n - 1; i++)
+            std::cout << prefix[i] << "   ";
+        if (prefix.back() == ' ')
+            std::cout << "└── ";
+        else
+            std::cout << "├── ";
+    }
+
+    void print_node(std::shared_ptr<base_node> const& u)
+    {
+        if (u->type() == node::base) {
+            std::cout << "(base)\n";
+        } else if (u->type() == node::anode) {
+            auto au = std::static_pointer_cast<anode>(u);
+            std::cout << "(anode, size=" << au->values.size() << ")\n";
+        } else if (u->type() == node::snode) {
+            auto su = std::static_pointer_cast<snode>(u);
+            std::cout << "(snode, value=" << su->value << ")\n";
+        } else if (u->type() == node::notxn) {
+            std::cout << "(notxn)\n";
+        } else if (u->type() == node::fsnode) {
+            std::cout << "(fsnode)\n";
+        } else if (u->type() == node::fvnode) {
+            std::cout << "(fvnode)\n";
+        } else if (u->type() == node::fnode) {
+            std::cout << "(fnode)\n";
+        } else if (u->type() == node::enode) {
+            std::cout << "(enode)\n";
+        }
+    }
+
+    void print(std::shared_ptr<base_node> const& u, std::string const& prefix) const
+    {
+        print_prefix(prefix);
+        print_node(u);
+        if (u->type() == node::anode) {
+            for (auto i = 0u; i < u->values.size(); i++)
+                print(u->values[i], prefix + (i == u->values.size() - 1 ? ' ' : '|'));
+        }
+    }
+
+    void print() const
+    {
+        print(root, {});
     }
 
     std::shared_ptr<anode> root;
