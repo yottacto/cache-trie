@@ -407,7 +407,7 @@ struct trie
 
         int n = prefix.size();
         for (auto i = 0; i < n - 1; i++)
-            std::cout << prefix[i] << "   ";
+            std::cout << (prefix[i] == ' ' ? " " : "│") << "   ";
         if (prefix.back() == ' ')
             std::cout << "└── ";
         else
