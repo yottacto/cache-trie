@@ -194,7 +194,6 @@ struct trie
                         return insert(key, value, hash, level, cur, prev);
                     }
                 } else {
-                    std::shared_ptr<base_node> sn{std::make_shared<snode>(hash, key, value)};
                     auto an = create_anode(
                         u->hash, u->key, u->value,
                         hash, key, value,
