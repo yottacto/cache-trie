@@ -22,6 +22,22 @@ enum class node
     enode,
 };
 
+std::ostream& operator<<(std::ostream& os, node const& n)
+{
+    std::vector<std::string> name{
+        "base",
+        "anode",
+        "snode",
+        "notxn",
+        "fsnode",
+        "fvnode",
+        "fnode",
+        "enode",
+    };
+    os << name[static_cast<int>(n)];
+    return os;
+}
+
 template <class Key, class T>
 struct trie
 {
@@ -150,10 +166,9 @@ struct trie
             else
                 return insert(key, value, hash, level, cur, prev);
         } else if (old->type() == node::anode) {
-            auto anold = std::static_pointer_cast<anode>(old);
-            return insert(key, value, hash, level + 4, anold, cur);
+            auto an = std::static_pointer_cast<anode>(old);
+            return insert(key, value, hash, level + 4, an, cur);
         } else if (old->type() == node::snode) {
-            // TODO dynamic_pointer_cast here?
             auto u = std::static_pointer_cast<snode>(old);
             auto txn = std::atomic_load(&u->txn);
             if (txn->type() == node::notxn) {
@@ -180,7 +195,11 @@ struct trie
                     }
                 } else {
                     std::shared_ptr<base_node> sn{std::make_shared<snode>(hash, key, value)};
-                    auto an = create_anode(old, sn, level + 4);
+                    auto an = create_anode(
+                        u->hash, u->key, u->value,
+                        hash, key, value,
+                        level + 4
+                    );
                     if (std::atomic_compare_exchange_weak(&u->txn, &txn, an)) {
                         std::atomic_compare_exchange_weak(&cur->values[pos], &old, an);
                         return true;
@@ -306,6 +325,20 @@ struct trie
         }
     }
 
+    // create fresh snode
+    auto create_anode(
+        hash_type h1, key_type const& k1, value_type const& v1,
+        hash_type h2, key_type const& k2, value_type const& v2,
+        int level
+    ) -> std::shared_ptr<base_node>
+    {
+        return create_anode(
+            std::make_shared<snode>(h1, k1, v1),
+            std::make_shared<snode>(h2, k2, v2),
+            level
+        );
+    }
+
     // TODO is it sequential?
     auto create_anode(
         std::shared_ptr<base_node> const& sn1,
@@ -425,7 +458,7 @@ struct trie
             std::cout << "(anode, size=" << au->values.size() << ")\n";
         } else if (u->type() == node::snode) {
             auto su = std::static_pointer_cast<snode>(u);
-            std::cout << "(snode, value=" << su->value << ")\n";
+            std::cout << "(snode, value=" << su->value << ", txn=" << su->txn->type() << ")\n";
         } else if (u->type() == node::notxn) {
             std::cout << "(notxn)\n";
         } else if (u->type() == node::fsnode) {

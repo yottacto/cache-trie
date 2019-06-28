@@ -7,12 +7,13 @@ int main()
 {
     concurrent::trie<int, int> t;
     t.debug_insert(0);
-    t.debug_insert(4);
-    t.debug_insert(1);
-    t.debug_insert(15);
+    // t.debug_insert(4);
+    // t.debug_insert(1);
+    // t.debug_insert(15);
     t.debug_insert(16);
     t.debug_insert(32);
     t.debug_insert(48);
+
     // t.debug_insert(64);
     t.print();
 }
