@@ -156,7 +156,7 @@ struct trie
         std::shared_ptr<anode> const& prev
     ) -> bool
     {
-        std::cerr << "inserting: hash=" << hash << ", level=" << level << "\n";
+        // std::cerr << "inserting: hash=" << hash << ", level=" << level << "\n";
         auto pos = (hash >> level) & ((cur->values).size() - 1);
         auto old = std::atomic_load(&cur->values[pos]);
         if (!old) {
@@ -382,7 +382,7 @@ struct trie
         std::shared_ptr<base_node> wide{std::make_shared<anode>(16)};
         auto awide = std::static_pointer_cast<anode>(wide);
         // TODO atomic_load?
-        awide->values[u->level] = std::atomic_load(&u->narrow);
+        sequential_transfer(std::atomic_load(&u->narrow), awide, u->level);
         std::shared_ptr<anode> empty;
         // TODO maybe create the dereived first for better performance
         auto uwide = std::dynamic_pointer_cast<anode>(wide);
