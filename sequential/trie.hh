@@ -110,7 +110,6 @@ struct trie
         int level
     )
     {
-        // FIXME later, the naming of wide
         auto mask = wide->values.size() - 1;
         auto pos = (sn->hash >> level) & mask;
         if (!wide->values[pos])
