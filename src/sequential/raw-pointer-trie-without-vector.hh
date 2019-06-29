@@ -1,6 +1,5 @@
 #pragma once
 #include <iostream>
-#include <vector>
 #include <string>
 #include <optional>
 
@@ -8,7 +7,7 @@ namespace sequential
 {
 
 template <class Key, class T>
-struct raw_trie
+struct raw_trie_no_vec
 {
     using key_type   = Key;
     using value_type = T;
@@ -17,18 +16,19 @@ struct raw_trie
     struct node
     {
         node(hash_type hash, key_type const& key, value_type const& value)
-            : hash(hash), key(key), value(value), _leaf(true) {}
+            : hash(hash), key(key), value(value), _size(0) {}
 
-        node(int size) : _leaf(false), values(size) {}
+        node(int size) : _size(size), values(new node*[size]()) {}
 
-        auto is_leaf() const { return _leaf; }
+        auto size() const { return _size; }
+        auto is_leaf() const { return _size == 0; }
 
         hash_type hash;
         key_type key;
         value_type value;
-        bool _leaf;
+        int _size;
 
-        std::vector<node*> values;
+        node** values;
     };
 
     auto lookup(
@@ -38,7 +38,7 @@ struct raw_trie
         node* cur
     ) const -> std::optional<value_type>
     {
-        auto pos = (hash >> level) & (cur->values.size() - 1);
+        auto pos = (hash >> level) & (cur->size() - 1);
         auto u = cur->values[pos];
         if (!u) return {};
         if (!u->is_leaf()) {
@@ -61,7 +61,7 @@ struct raw_trie
     )
     {
         // std::cerr << "inserting: hash=" << hash << ", level=" << level << "\n";
-        auto pos = (hash >> level) & ((cur->values).size() - 1);
+        auto pos = (hash >> level) & (cur->size() - 1);
         auto u = cur->values[pos];
         if (!u) {
             auto v = new node(hash, key, value);
@@ -71,8 +71,8 @@ struct raw_trie
         } else {
             if (u->key == key) {
                 cur->values[pos] = new node(hash, key, value);
-            } else if (cur->values.size() == 4) {
-                auto ppos = (hash >> (level - 4)) & (prev->values.size() - 1);
+            } else if (cur->size() == 4) {
+                auto ppos = (hash >> (level - 4)) & (prev->size() - 1);
                 complete_expansion(prev, ppos, cur, level);
                 insert(key, value, hash, level, prev->values[ppos], prev);
             } else {
@@ -111,7 +111,7 @@ struct raw_trie
         int level
     )
     {
-        auto mask = wide->values.size() - 1;
+        auto mask = wide->size() - 1;
         auto pos = (sn->hash >> level) & mask;
         if (!wide->values[pos])
             wide->values[pos] = sn;
@@ -131,11 +131,11 @@ struct raw_trie
             auto an = create_anode(sn, u, level + 4);
             wide->values[pos] = an;
         } else {
-            auto mask = u->values.size() - 1;
+            auto mask = u->size() - 1;
             auto npos = (sn->hash >> (level + 4)) & mask;
             if (!u->values[npos]) {
                 u->values[npos] = sn;
-            } else if (u->values.size() == 4) {
+            } else if (u->size() == 4) {
                 auto an = new node(16);
                 sequential_transfer(u, an, level + 4);
                 wide->values[pos] = an;
@@ -152,9 +152,9 @@ struct raw_trie
         int level
     )
     {
-        auto mask = wide->values.size() - 1;
+        auto mask = wide->size() - 1;
         auto i = 0;
-        while (i < source->values.size()) {
+        while (i < source->size()) {
             auto _node = source->values[i];
             if (!_node) {
                 // skip empty node
@@ -236,7 +236,7 @@ struct raw_trie
         if (!u) {
             std::cout << "(empty)\n";
         } else if (!u->is_leaf()) {
-            std::cout << "(anode, size=" << u->values.size() << ")\n";
+            std::cout << "(anode, size=" << u->size() << ")\n";
         } else {
             std::cout << "(snode, value=" << u->value << ")\n";
         }
@@ -247,7 +247,7 @@ struct raw_trie
         print_prefix(prefix);
         print_node(u);
         if (u && !u->is_leaf()) {
-            auto n = u->values.size();
+            auto n = u->size();
             for (auto i = 0u; i < n; i++)
                 print(u->values[i], prefix + (i == n - 1 ? ' ' : '|'));
         }

@@ -1,11 +1,11 @@
 // ml:opt = 0
 // ml:ccf += -g
 #include <iostream>
-#include "raw-pointer-trie.hh"
+#include "raw-pointer-trie-without-vector.hh"
 
 int main()
 {
-    sequential::trie<int, int> t;
+    sequential::raw_trie<int, int> t;
     t.debug_insert(0);
     t.debug_insert(4);
     t.debug_insert(1);

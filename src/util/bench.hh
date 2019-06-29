@@ -1,5 +1,6 @@
 #pragma once
 #include <iostream>
+#include <string>
 #include <algorithm>
 #include <numeric>
 #include "timer.hh"
@@ -24,13 +25,14 @@ auto bench_insert_onne(T& a, int size)
 }
 
 template <class T>
-auto bench_insert(T& a, int size, int repeat = 20)
+auto bench_insert(T& a, int size, int repeat = 20, std::string const& name = "")
 {
     // warmup
     double warm_sum_time = 0;
     for (auto i = 0; i < 4; i++)
         warm_sum_time += bench_insert_onne(a, size);
 
+    std::cout << "testing [" << name << "]\n";
     std::cout << "warm avg: " << warm_sum_time/4 << "\n";
 
     double sum_time = 0;
@@ -39,6 +41,7 @@ auto bench_insert(T& a, int size, int repeat = 20)
     auto res = sum_time / repeat;
     std::cout << "random insert [" << size << "] elements, time "
         << res << "ms\n";
+    std::cout << std::string(80, '=') << "\n";
     return res;
 }
 
