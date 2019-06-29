@@ -287,7 +287,6 @@ struct trie
             auto _node = source->values[i];
             // TODO we leave lnode here (for same key)
             if (_node->type() == node::fvnode) {
-                // TODO we can skip, the slot was empty?
             } else if (is_frozen_snode(_node)) {
                 auto oldsn = std::static_pointer_cast<snode>(_node);
                 std::shared_ptr<base_node> sn{std::make_shared<snode>(

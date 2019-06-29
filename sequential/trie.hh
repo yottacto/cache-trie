@@ -155,7 +155,9 @@ struct trie
         auto i = 0;
         while (i < source->values.size()) {
             auto _node = source->values[i];
-            if (_node->is_leaf()) {
+            if (!_node) {
+                // skip empty node
+            } else if (_node->is_leaf()) {
                 auto sn{std::make_shared<node>(
                     _node->hash,
                     _node->key,
