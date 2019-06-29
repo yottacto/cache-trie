@@ -84,7 +84,7 @@ struct trie
 
     void insert(key_type const& key, value_type const& value, hash_type hash)
     {
-        insert(key, value, hash, 0, std::atomic_load(&root), nullptr);
+        insert(key, value, hash, 0, root, nullptr);
     }
 
     // TODO key_type = value_type = hash_type
