@@ -1,7 +1,7 @@
 // ml:opt = 0
 // ml:ccf += -g
 #include <iostream>
-#include "raw-pointer-trie-without-vector.hh"
+#include "raw-pointer-trie.hh"
 
 int main()
 {

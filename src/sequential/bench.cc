@@ -3,7 +3,6 @@
 #include <numeric>
 #include "../util/bench.hh"
 #include "raw-pointer-trie.hh"
-#include "raw-pointer-trie-without-vector.hh"
 #include "trie.hh"
 
 #include <unordered_map>
@@ -38,9 +37,6 @@ int main()
 
     unordered_map um;
     util::bench_insert(um, size, 4, "unordered_map");
-
-    sequential::raw_trie_no_vec<int, int> raw_t_no_vec;
-    util::bench_insert(raw_t_no_vec, size, 4, "raw trie without vector");
 
     sequential::raw_trie<int, int> raw_t;
     util::bench_insert(raw_t, size, 4, "raw trie");
