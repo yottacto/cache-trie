@@ -5,7 +5,7 @@
 
 int main()
 {
-    sequential::raw_trie<int, int> t;
+    sequential::raw_trie_mem_pool<int, int> t(1000);
     t.debug_insert(0);
     t.debug_insert(4);
     t.debug_insert(1);

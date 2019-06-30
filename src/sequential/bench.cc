@@ -33,15 +33,22 @@ int main()
     // map m;
     // util::bench_insert(m, 1'100'000, 10);
 
-    auto constexpr size = 2'100'000;
+    auto constexpr size = 1'100'000;
 
-    unordered_map um;
-    util::bench_insert(um, size, 4, "unordered_map");
+    util::bench_insert<unordered_map>(
+        size, 4, "unordered_map"
+    );
 
-    sequential::raw_trie<int, int> raw_t;
-    util::bench_insert(raw_t, size, 4, "raw trie");
+    util::bench_insert<sequential::raw_trie<int, int>>(
+        size, 4, "raw trie"
+    );
 
-    sequential::trie<int, int> t;
-    util::bench_insert(t, size, 4, "shared_ptr trie");
+    util::bench_insert<sequential::raw_trie_mem_pool<int, int, size>>(
+        size, 4, "raw trie"
+    );
+
+    // util::bench_insert<sequential::trie<int, int>>(
+    //     size, 4, "shared_ptr trie"
+    // );
 }
 
