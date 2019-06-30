@@ -21,6 +21,7 @@ enum class node
     fvnode,
     fnode,
     enode,
+    xnode,
 };
 
 std::ostream& operator<<(std::ostream& os, node const& n)
@@ -119,6 +120,27 @@ struct trie
         std::shared_ptr<anode> narrow;
         hash_type hash;
         std::shared_ptr<anode> wide;
+        int level;
+    };
+
+    struct xnode : base_node
+    {
+        xnode(
+            std::shared_ptr<anode> const& parent,
+            int parent_pos,
+            std::shared_ptr<anode> const& stale,
+            hash_type hash,
+            int level
+        ) : parent(parent), parent_pos(parent_pos), stale(stale), hash(hash), level(level)
+        {
+        }
+
+        auto type() const -> node override { return node::xnode; }
+
+        std::shared_ptr<anode> parent;
+        int parent_pos;
+        std::shared_ptr<anode> stale;
+        hash_type hash;
         int level;
     };
 
@@ -275,6 +297,9 @@ struct trie
         } else if (old->type() == node::enode) {
             complete_expansion(old);
             return {false, {}};
+        } else if (old->type() == node::xnode) {
+            complete_compression(old);
+            return {false, {}};
         } else if (old->type() == node::fnode || old->type() == node::fvnode) {
             return {false, {}};
         }
@@ -377,6 +402,31 @@ struct trie
         }
     }
 
+    void sequential_transfer_narrow(
+        std::shared_ptr<anode> const& source,
+        std::shared_ptr<anode> const& narrow
+    )
+    {
+        auto i = 0;
+        while (i < 4) {
+            auto _node = source->values[i];
+            if (_node->type() == node::fvnode) {
+            } else if (is_frozen_snode(_node)) {
+                auto oldsn = std::static_pointer_cast<snode>(_node);
+                std::shared_ptr<base_node> sn{std::make_shared<snode>(
+                    oldsn->hash,
+                    oldsn->key,
+                    oldsn->value
+                )};
+                narrow->values[i] = sn;
+            } else {
+                // TODO throw an error, source array node should have been
+                // frozen.
+            }
+            i += 1;
+        }
+    }
+
     auto is_frozen_snode(std::shared_ptr<base_node> const& node)
     {
         if (node->type() == node::snode) {
@@ -436,25 +486,37 @@ struct trie
         }
     }
 
-    void complete_expansion(std::shared_ptr<base_node> const& en)
+    void complete_expansion(std::shared_ptr<base_node> const& u)
     {
-        // TODO static_cast here?
-        auto u = std::static_pointer_cast<enode>(en);
-        // TODO need atomic_load?
-        freeze(std::atomic_load(&u->narrow));
+        auto en = std::static_pointer_cast<enode>(u);
+        freeze(std::atomic_load(&en->narrow));
         std::shared_ptr<base_node> wide{std::make_shared<anode>(16)};
         auto awide = std::static_pointer_cast<anode>(wide);
-        // TODO atomic_load?
-        sequential_transfer(std::atomic_load(&u->narrow), awide, u->level);
+        sequential_transfer(std::atomic_load(&en->narrow), awide, en->level);
         std::shared_ptr<anode> empty;
         // TODO maybe create the dereived first for better performance
-        auto uwide = std::dynamic_pointer_cast<anode>(wide);
-        if (!std::atomic_compare_exchange_weak(&u->wide, &empty, uwide))
+        if (!std::atomic_compare_exchange_weak(&en->wide, &empty, awide))
             // FIXME ?
-            wide = std::atomic_load(&u->wide);
-        // FIXME atomic_load?
-        auto ben = std::static_pointer_cast<base_node>(en);
-        std::atomic_compare_exchange_weak(&u->parent->values[u->parent_pos], &ben, wide);
+            wide = std::atomic_load(&en->wide);
+        std::atomic_compare_exchange_weak(&en->parent->values[en->parent_pos], &u, wide);
+    }
+
+    auto complete_compression(std::shared_ptr<base_node> const& u) -> bool
+    {
+        auto xn = std::static_pointer_cast<xnode>(u);
+        auto parent = std::atomic_load(&xn->parent);
+        auto parent_pos = xn->parent_pos;
+        auto level = xn->level;
+
+        auto stale = std::atomic_load(&xn->stale);
+        auto compressed = freeze_and_compress(stale, level);
+
+        if (std::atomic_compare_exchange_weak(parent->values[parent_pos], u, compressed)) {
+            if (!compressed)
+                decrement_count(parent);
+            return !compressed || compressed->type() == node::snode;
+        }
+        return false;
     }
 
     void freeze(std::shared_ptr<anode> const& cur)
@@ -495,6 +557,101 @@ struct trie
             i += 1;
         }
     }
+
+    auto freeze_and_compress(std::shared_ptr<anode> const& cur, int level) -> std::shared_ptr<base_node>
+    {
+        std::shared_ptr<base_node> single;
+        auto i = 0;
+        while (i < cur->values.size()) {
+            auto _node = std::atomic_load(&cur->values[i]);
+            if (!_node) {
+                std::shared_ptr<base_node> fvn = std::make_shared<fvnode>();
+                if (!std::atomic_compare_exchange_weak(&cur->values[i], &_node, fvn))
+                    i -= 1;
+            } else if (_node->type() == node::snode) {
+                auto sn = std::static_pointer_cast<snode>(_node);
+                auto txn = std::atomic_load(&sn->txn);
+                if (txn->type() == node::notxn) {
+                    std::shared_ptr<base_node> fsn = std::make_shared<fsnode>();
+                    if (!std::atomic_compare_exchange_weak(&sn->txn, &txn, fsn)) {
+                        i -= 1;
+                    } else {
+                        if (!single) single = sn;
+                        else single = cur;
+                    }
+                } else if (txn->type() != node::fsnode) {
+                    single = cur;
+                } else {
+                    single = cur;
+                    std::atomic_compare_exchange_weak(&cur->values[i], &_node, txn);
+                    i -= 1;
+                }
+            } else if (_node->type() == node::anode) {
+                single = cur;
+                auto an = std::static_pointer_cast<anode>(_node);
+                std::shared_ptr<base_node> fn{std::make_shared<fnode>(an)};
+                std::atomic_compare_exchange_weak(&cur->values[i], &_node, fn);
+                i -= 1;
+            } else if (_node->type() == node::fnode) {
+                single = cur;
+                auto fn = std::static_pointer_cast<fnode>(_node);
+                freeze(std::atomic_load(&fn->frozen));
+            } else if (_node->type() == node::fvnode) {
+                single = cur;
+            } else if (_node->type() == node::enode) {
+                single = cur;
+                complete_expansion(_node);
+                i -= 1;
+            } else if (_node->type() == node::xnode) {
+                single = cur;
+                auto xn = std::static_pointer_cast<xnode>(_node);
+                complete_compression(xn);
+                i -= 1;
+            }
+            i += 1;
+        }
+        if (single->type() == node::snode) {
+            auto oldsn = std::static_pointer_cast<snode>(single);
+            single = std::make_shared<snode>(oldsn->hash, oldsn->key, oldsn->value);
+            return single;
+        } else if (single) {
+            return compress_frozen(cur, level);
+        } else {
+            return single;
+        }
+    }
+
+    auto compress_frozen(std::shared_ptr<anode> const& frozen, int level) -> std::shared_ptr<base_node>
+    {
+        std::shared_ptr<base_node> single;
+        auto i = 0;
+        while (i < frozen->values.size()) {
+            auto old = std::atomic_load(&frozen->values[i]);
+            if (old->type() != node::fvnode) {
+                if (!single && old->type() == node::snode) {
+                    single = old;
+                } else {
+                    if (frozen->values.size() == 16) {
+                        auto wide{std::make_shared<anode>(16)};
+                        sequential_transfer(frozen, wide, level);
+                        return wide;
+                    } else {
+                        auto narrow{std::make_shared<anode>(4)};
+                        sequential_transfer_narrow(frozen, narrow);
+                        return narrow;
+                    }
+                }
+            }
+            i += 1;
+        }
+        if (single) {
+            // TODO ?
+            auto oldsn = std::static_pointer_cast<snode>(single);
+            single = std::make_shared<snode>(oldsn->hash, oldsn->key, oldsn->value);
+        }
+        return single;
+    }
+
 
     // TODO key_type = value_type = hash_type
     auto debug_lookup(hash_type hash) -> std::optional<value_type>
