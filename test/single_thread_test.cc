@@ -1,8 +1,9 @@
 #include <iostream>
+#include <vector>
+#include <utility>
 #include <algorithm>
 #include <stdexcept>
 #include <random>
-#include <array>
 #include "../src/util/progress-display.hh"
 #include "../src/concurrent/trie.hh"
 
@@ -11,7 +12,7 @@
 template <int Ops>
 auto generate_ops(int max = 100)
 {
-    std::array<std::pair<int, int>, Ops> ops;
+    std::vector<std::pair<int, int>> ops(Ops);
     std::random_device rd{};
     std::mt19937 gen{rd()};
     std::uniform_int_distribution<> dis_op(0, 2);
@@ -23,7 +24,7 @@ auto generate_ops(int max = 100)
 }
 
 template <class Array>
-auto single_thread_small_once_test(Array const& ops) -> bool
+auto single_thread_once_test(Array const& ops) -> bool
 {
     concurrent::trie<int, int> t;
     std::unordered_map<int, int> um;
@@ -51,16 +52,16 @@ auto single_thread_small_once_test(Array const& ops) -> bool
 }
 
 template <int Ops = 8, int Repeat = 1'000'000>
-void single_thread_small_test(int max = 100)
+void single_thread_test(int max = 100)
 {
     std::cout << std::string(80, '=') << "\n";
-    std::cout << "testing: single_thread_small_test\n";
+    std::cout << "testing: single_thread_test\n";
 
     util::progress_display pd(Repeat);
     for (auto i = 0; i < Repeat; i++) {
         auto ops = generate_ops<Ops>(max);
         try {
-            if (!single_thread_small_once_test(ops))
+            if (!single_thread_once_test(ops))
                 throw std::logic_error{"bad case"};
         } catch (...) {
             std::cout << "test failed.\n";
@@ -81,6 +82,6 @@ void single_thread_small_test(int max = 100)
 
 int main()
 {
-    single_thread_small_test<20, 100'000'000>(100);
+    single_thread_test<10'000'000, 10>(1<<30);
 }
 
