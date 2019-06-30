@@ -2,6 +2,7 @@
 #include <iostream>
 #include <vector>
 #include <string>
+#include <utility>
 #include <memory>
 #include <optional>
 #include <atomic>
@@ -224,10 +225,64 @@ struct trie
             insert(key, value, hash);
     }
 
-    // TODO key_type = value_type = hash_type
-    void debug_insert(hash_type hash)
+    auto remove(
+        key_type const& key,
+        hash_type hash,
+        int level,
+        std::shared_ptr<anode> const& cur,
+        std::shared_ptr<anode> const& prev
+    ) -> std::pair<bool, std::optional<value_type>>
     {
-        insert(hash, hash, hash);
+        auto mask = (cur->values.size()) - 1;
+        auto pos = (hash >> level) & mask;
+        auto old = std::atomic_load(&cur->values[pos]);
+        if (!old) {
+            return {true, {}};
+        } else if (old->type() == node::anode) {
+            auto oldan = std::static_pointer_cast<anode>(old);
+            return remove(key, hash, level + 4, oldan, cur);
+        } else if (old->type() == node::snode) {
+            auto oldsn = std::static_pointer_cast<snode>(old);
+            auto txn = std::atomic_load(&oldsn->txn);
+            if (txn->type() == node::notxn) {
+                if (oldsn->hash == hash && oldsn->key == key) {
+                    std::shared_ptr<base_node> empty{nullptr};
+                    if (std::atomic_compare_exchange_weak(&oldsn->txn, &txn, empty)) {
+                        std::atomic_compare_exchange_weak(&cur->values[pos], &old, empty);
+                        return {true, oldsn->value};
+                    } else {
+                        return remove(key, hash, level, cur, prev);
+                    }
+                } else {
+                    return {true, {}};
+                }
+            } else if (txn->type() == node::fsnode) {
+                return {false, {}};
+            } else {
+                std::atomic_compare_exchange_weak(&cur->values[pos], &old, txn);
+                return remove(key, hash, level, cur, prev);
+            }
+        } else if (old->type() == node::enode) {
+            complete_expansion(old);
+            return {false, {}};
+        } else if (old->type() == node::fnode || old->type() == node::fvnode) {
+            return {false, {}};
+        }
+
+        // else {
+        //     // TODO throw error, unexpected case
+        // }
+
+        return {false, {}};
+    }
+
+    auto remove(key_type const& key, hash_type hash) -> std::optional<value_type>
+    {
+        auto res = remove(key, hash, 0, std::atomic_load(&root), nullptr);
+        if (res.first)
+            return res.second;
+        else
+            return remove(key, hash);
     }
 
     void sequential_insert(
@@ -429,6 +484,18 @@ struct trie
             }
             i += 1;
         }
+    }
+
+    // TODO key_type = value_type = hash_type
+    void debug_insert(hash_type hash)
+    {
+        insert(hash, hash, hash);
+    }
+
+    // TODO key_type = value_type = hash_type
+    auto debug_remove(hash_type hash) -> std::optional<value_type>
+    {
+        return remove(hash, hash);
     }
 
     void print_prefix(std::string const& prefix) const
