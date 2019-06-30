@@ -44,7 +44,7 @@ int main()
     );
 
     util::bench_insert<sequential::raw_trie_mem_pool<int, int, size>>(
-        size, 4, "raw trie"
+        size, 4, "raw trie with memory pool"
     );
 
     // util::bench_insert<sequential::trie<int, int>>(
