@@ -132,20 +132,30 @@ struct trie
     {
         auto pos = (hash >> level) & ((cur->values).size() - 1);
         auto old = std::atomic_load(&cur->values[pos]);
-        if (!old || std::dynamic_pointer_cast<fvnode>(old))
+        if (!old || old->type() == node::fvnode) {
             return {};
-        if (auto u = std::dynamic_pointer_cast<anode>(old); u)
-            return lookup(key, hash, level + 4, u);
-        if (auto u = std::dynamic_pointer_cast<snode>(old); u) {
-            if (u->key == key)
-                return u->value;
+        } else if (old->type() == node::anode) {
+            auto oldan = std::static_pointer_cast<anode>(old);
+            return lookup(key, hash, level + 4, oldan);
+        } else if (old->type() == node::snode) {
+            auto oldsn = std::static_pointer_cast<snode>(old);
+            if (oldsn->key == key)
+                return oldsn->value;
             else
                 return {};
+        } else if (old->type() == node::enode) {
+            auto olden = std::static_pointer_cast<enode>(old);
+            return lookup(key, hash, level + 4, olden->narrow);
+        } else if (old->type() == node::fnode) {
+            auto oldfn = std::static_pointer_cast<fnode>(old);
+            return lookup(key, hash, level + 4, oldfn->frozen);
         }
-        if (auto u = std::dynamic_pointer_cast<enode>(old); u)
-            return lookup(key, hash, level + 4, u->narrow);
-        if (auto u = std::dynamic_pointer_cast<fnode>(old); u)
-            return lookup(key, hash, level + 4, u->frozen);
+
+        // else {
+        //     // TODO throw error, unexpected case
+        // }
+
+        return {};
     }
 
     auto insert(
@@ -484,6 +494,12 @@ struct trie
             }
             i += 1;
         }
+    }
+
+    // TODO key_type = value_type = hash_type
+    auto debug_lookup(hash_type hash) -> std::optional<value_type>
+    {
+        return lookup(hash, hash, 0, std::atomic_load(&root));
     }
 
     // TODO key_type = value_type = hash_type
